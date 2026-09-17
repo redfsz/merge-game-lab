@@ -2,7 +2,7 @@ import {D,state,$,OS,COLORS,NAMES,ICONS,byName,byDay,fmt,esc,ds,glyph,toast,rend
 import {RobotPlayer,STRATEGIES} from './robot.js';
 import {WorkflowSimulator as RobotSimulator,PLAN_MODES} from './workflow.js';
 import {help} from './explain.js';
-import {loadScenario,workflowPanel,paintWorkflow,warehousePanel,paintWarehouse,orderPool,bindPool,settingsPanel,bindWorkflow,cdTimeLabel} from './workflow-ui.js';
+import {loadScenario,workflowPanel,paintWorkflow,warehousePanel,paintWarehouse,orderPool,paintOrderPool,bindPool,settingsPanel,bindWorkflow,cdTimeLabel} from './workflow-ui.js';
 
 let sim=null,player=null,selected=-1,opening='empty',speed=1,policy='orders',focus='auto';
 let initialLayout=null,initialEnergy=0,editing=false,draft=null,draftEnergy=0,brush=null,erase=false;
@@ -31,11 +31,11 @@ export function renderBoard(){
 }
 function paintStatus(){
   if(state.page!=='board'||!$('#robot-status')||!sim)return;
-  $('#robot-status').textContent=editing?'布置初始棋盘':sim.complete()?'今天的订单完成了':player?.playing?'机器人正在玩':sim.failure?'机器人暂停了':'准备好了';
+  $('#robot-status').textContent=editing?'布置初始棋盘':sim.ordersComplete()?'今天的订单完成了':sim.planComplete()?'设置的计划已完成，自动停止':player?.playing?'机器人正在玩':sim.failure?'机器人暂停了':'准备好了';
   $('#robot-current-action').textContent=editing?'保存后开始一局新模拟':`已完成${sim.delivered}次行动 · ${sim.actions}个操作步骤`;
   $('#robot-energy').textContent=fmt(editing?draftEnergy:sim.energy);
   $('#energy-pill').classList.toggle('low',!editing&&sim.energy<10);
-  if($('#robot-play')){$('#robot-play').textContent=player?.playing?'Ⅱ 暂停':sim.complete()?'✓ 全部完成':'▶ 机器人开玩';$('#robot-play').disabled=sim.complete();$('#robot-undo').disabled=!sim.history.length}
+  if($('#robot-play')){$('#robot-play').textContent=player?.playing?'Ⅱ 暂停':sim.complete()?'✓ 计划完成':'▶ 机器人开玩';$('#robot-play').disabled=sim.complete();$('#robot-step').disabled=sim.complete();$('#robot-undo').disabled=!sim.history.length}
   document.querySelectorAll('[data-strategy]').forEach(b=>{const active=b.dataset.strategy===policy;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))});
   document.querySelectorAll('[data-robot-speed]').forEach(b=>{const active=+b.dataset.robotSpeed===speed;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))});
   if($('#strategy-reason'))$('#strategy-reason').textContent=STRATEGIES[policy].hint;
@@ -60,7 +60,8 @@ function paint(){
 }
 function paintOrders(){
   $('#robot-progress').textContent=`${sim.delivered} / ${sim.orders.length}`;
-  $('#robot-orders').innerHTML=orderPool(sim,manual);bindPool(sim);
+  if(!$('#robot-orders .order-pool')){$('#robot-orders').innerHTML=orderPool(sim);bindPool(sim)}
+  paintOrderPool(sim);
   if($('#robot-submit'))$('#robot-submit').onclick=()=>manual(()=>sim.execute(sim.describe({type:'submit',reason:'手动交付已经准备好的订单'})));
   if($('#robot-next-day'))$('#robot-next-day').onclick=()=>{const next=D.days.find(d=>d.day>state.day);if(!next){toast('已经是最后一天');return}state.day=next.day;state.store=next.store;const days=D.days.filter(d=>d.store===next.store);state.from=days[0].day;state.to=days.at(-1).day;resetRobot();render()};
 }
@@ -97,7 +98,7 @@ function animate({action,before,duration}){
 }
 function manual(fn){stopRobot();const length=sim.events.length;const r=fn();if(r?.ok===false)toast(r.message);else if(sim.events.length===length&&r?.ok)sim.record('手动',sim.log[0]??'手动操作','由用户操作，不改变选单倾向');selected=-1;paint()}
 function showRules(){
-  $('#detail-body').innerHTML=`<h2>棋盘怎么玩</h2><div class="model-help"><p>⚡ 生成一次扣1体力；同级合成免费；加工按配置扣体力。体力用完暂停。可直接填写体力并应用到当前局，也可用+100快速补充；初始体力在布置棋盘时设置。</p><p>📦 从当日订单池按计划挑订单。每交付一单推进计划；可优先金币、优先预计剩余体力最少，或随机选单。</p><p>▶ 1×按生成0.8秒、合成0.65秒、加工1.1秒、交付1.2秒播放。速度只影响观看，计时使用这套演示节拍。</p><p>当前使用配置效率的期望产出，尚未接入随机掉落和自然恢复；CD设置为预留，当前不执行等待。礼盒可手动生成，回收规则也作了棋盘化处理，因此体力可能与表格连续计算不同。</p><p>初始布局只保存在当前浏览器；保存布局会开始一局新模拟。原始配置不变。</p><p>仓库默认7格，空间不足时先合并，再暂存，不自动删除。金币是演示值或手动值，不来自工作簿。</p></div>`;$('#detail').showModal();
+  $('#detail-body').innerHTML=`<h2>棋盘怎么玩</h2><div class="model-help"><p>⚡ 生成一次扣1体力；同级合成免费；加工按配置扣体力。体力用完暂停。可直接填写体力并应用到当前局，也可用+100快速补充；初始体力在布置棋盘时设置。</p><p>📦 从当日订单池按计划挑订单。每行计划只负责一个订单，最多7行；最后一行交付后停止，不循环。可优先金币、优先预计剩余体力最少，或随机选单。</p><p>▶ 1×按生成0.8秒、合成0.65秒、加工1.1秒、交付1.2秒播放。速度只影响观看，计时使用这套演示节拍。</p><p>当前使用配置效率的期望产出，尚未接入随机掉落和自然恢复；CD设置为预留，当前不执行等待。礼盒可手动生成，回收规则也作了棋盘化处理，因此体力可能与表格连续计算不同。</p><p>初始布局只保存在当前浏览器；保存布局会开始一局新模拟。原始配置不变。</p><p>仓库默认7格，空间不足时先合并，再暂存，不自动删除。金币是演示值或手动值，不来自工作簿。</p></div>`;$('#detail').showModal();
 }
 function editorPanel(){return `<section class="panel editor-panel"><div class="panel-head"><h2>选择初始物品</h2><span class="live-label">仅保存到本机</span></div><div class="panel-body"><div class="editor-tools"><label>初始体力 <input id="opening-energy" type="number" min="0" max="1000000" step="1" value="${draftEnergy}" aria-label="初始体力"></label><button id="opening-eraser" class="${erase?'selected':''}">⌫ 擦除</button></div><div class="editor-selected" id="editor-selected"></div><input class="palette-search" id="palette-search" type="search" placeholder="搜索物品或名称" aria-label="搜索初始物品" value="${esc(paletteQuery)}"><div class="palette-filter"><select id="palette-os" aria-label="初始物品线"><option value="all">全部物品线</option>${OS.map((k,i)=>`<option value="${i===7?'a':i+1}" ${paletteOS===String(i===7?'a':i+1)?'selected':''}>${ICONS[i]} ${osLabel(k)}</option>`).join('')}</select><select id="palette-type" aria-label="初始物品类型"><option value="all">全部类型</option><option value="base" ${paletteType==='base'?'selected':''}>合成物品</option><option value="recipe" ${paletteType==='recipe'?'selected':''}>加工物品</option></select></div><div class="item-palette" id="item-palette"></div><div class="palette-pagination"><button id="palette-prev" class="small">←</button><span id="palette-count"></span><button id="palette-next" class="small">→</button></div><div class="editor-hint">同一物品可连续放入多个格子</div><div class="editor-tools"><button id="opening-clear" class="small">清空物品</button><button id="opening-current" class="small">复制正在玩的棋盘</button>${savedOpening()?'<button id="opening-load" class="small">载入已保存布局</button>':''}</div></div></section>`}
 function paletteItems(){return D.items.filter(i=>!i.error&&(!i.store||i.store===sim.day.store)&&(!i.recipeStore||!/^\d+$/.test(i.recipeStore)||+i.recipeStore<=sim.day.store)&&(paletteType==='all'||paletteType==='base'&&i.chain&&!i.recipe||paletteType==='recipe'&&(i.recipe||i.extra>0))&&(paletteOS==='all'||i.chain?.startsWith(`dk_${paletteOS}_`)||Object.keys(i.needs??{}).some(c=>c.startsWith(`dk_${paletteOS}_`)))&&(!paletteQuery||`${i.display} ${i.name}`.toLowerCase().includes(paletteQuery.toLowerCase())))}

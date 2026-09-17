@@ -1,9 +1,10 @@
 import {RobotSimulator} from './robot.js';
 const copy=x=>JSON.parse(JSON.stringify(x));
 export const PLAN_MODES={value:'金币优先',easy:'易完成优先',random:'随机选单'};
-export const DEFAULT_PLAN=[{mode:'easy',repeat:1}];
+export const MAX_PLAN_ORDERS=7;
+export const DEFAULT_PLAN=[{mode:'easy'}];
 export function defaultOrders(data,day){return data.orders.filter(o=>o.day===day).map((o,i)=>({...copy(o),id:`sheet-${o.row}`,title:`订单 ${o.day}-${o.order}`,reward:o.clean&&!o.lines.length?0:Math.max(20,Math.round((o.stamina||0)*2+50+i%3*20)),rewardSource:'demo',source:'sheet'}))}
-export function validatePlan(plan){if(!Array.isArray(plan)||!plan.length||plan.length>30)throw Error('计划需要1到30个阶段');return plan.map(p=>{if(!Object.hasOwn(PLAN_MODES,p.mode)||!Number.isInteger(p.repeat)||p.repeat<1||p.repeat>999)throw Error('每个阶段需选择倾向，并填写1到999单');return {mode:p.mode,repeat:p.repeat}})}
+export function validatePlan(plan){if(!Array.isArray(plan)||!plan.length||plan.length>MAX_PLAN_ORDERS)throw Error('计划需要1到7行，每行只完成1个订单');return plan.map(p=>{if(!p||!Object.hasOwn(PLAN_MODES,p.mode)||p.repeat!==undefined&&p.repeat!==1)throw Error('每行请选择一种选单倾向，只完成1个订单');return {mode:p.mode}})}
 export function validateOrders(data,day,orders){
   if(!Array.isArray(orders)||!orders.length||orders.length>100)throw Error('订单池需要1到100张订单');
   const items=new Map(data.items.map(i=>[i.name,i])),store=data.days.find(d=>d.day===day)?.store,ids=new Set();
@@ -23,17 +24,20 @@ export class WorkflowSimulator extends RobotSimulator {
     super(data,day,{...options,strategy:'inventory',focus:'auto'});
     // Preserve audited source issues for inspection; strict editor rules apply to overrides.
     this.orders=options.orders?validateOrders(data,day,options.orders):defaultOrders(data,day);
-    this.completedIds=[];this.activeId=null;this.plan=validatePlan(options.plan??DEFAULT_PLAN);this.planIndex=0;this.planDone=0;this.coins=0;this.randomState=(options.seed??20260917)>>>0;
+    this.completedIds=[];this.activeId=null;this.plan=validatePlan(options.plan??DEFAULT_PLAN);this.planIndex=0;this.planOrders=[];this.coins=0;this.randomState=(options.seed??20260917)>>>0;
     this.warehouse=Array(options.warehouseCapacity??7).fill(null);this.validateCapacity(this.warehouse.length);
-    this.events=[];this.eventSerial=0;this.resumeGenerate=null;this.decision=null;this.planStartsNext=false;this.history=[];this.failure='';this.log=[];this.note('等待按计划选择订单');
+    this.events=[];this.eventSerial=0;this.resumeGenerate=null;this.decision=null;this.history=[];this.failure='';this.log=[];this.note('等待按计划选择订单');
   }
   current(){return this.completedIds?this.orders.find(o=>o.id===this.activeId):super.current()}
-  complete(){return this.completedIds?this.completedIds.length>=this.orders.length:super.complete()}
+  ordersComplete(){return this.completedIds?this.completedIds.length>=this.orders.length:super.complete()}
+  planComplete(){return !!this.plan&&this.planIndex>=this.plan.length}
+  complete(){return this.ordersComplete()||this.planComplete()}
   pending(){return this.orders.filter(o=>!this.completedIds.includes(o.id))}
-  snapshot(){return {...super.snapshot(),completedIds:copy(this.completedIds??[]),activeId:this.activeId??null,planIndex:this.planIndex??0,planDone:this.planDone??0,planStartsNext:this.planStartsNext??false,coins:this.coins??0,randomState:this.randomState??0,warehouse:copy(this.warehouse??[]),eventLength:this.events?.length??0,eventSerial:this.eventSerial??0,resumeGenerate:this.resumeGenerate??null,decision:copy(this.decision??null)}}
+  snapshot(){return {...super.snapshot(),completedIds:copy(this.completedIds??[]),activeId:this.activeId??null,planIndex:this.planIndex??0,planOrders:copy(this.planOrders??[]),coins:this.coins??0,randomState:this.randomState??0,warehouse:copy(this.warehouse??[]),eventLength:this.events?.length??0,eventSerial:this.eventSerial??0,resumeGenerate:this.resumeGenerate??null,decision:copy(this.decision??null)}}
   undo(){const saved=this.history.pop();if(!saved)return false;const {eventLength,...state}=saved;Object.assign(this,state);this.events.length=eventLength;return true}
   generate(generator){return this.current()?super.generate(generator):this.fail('先点播放或单步，让机器人按计划选择订单')}
-  setPlan(plan){this.plan=validatePlan(plan);this.planIndex=0;this.planDone=0;this.planStartsNext=!!this.activeId;this.history=[];this.record('计划修改','新计划已保存',this.activeId?'当前订单继续完成，下一张开始执行新计划':'下一次选单立即使用新计划');return this.plan}
+  lockedPlanRows(){return this.planIndex+(this.activeId?1:0)}
+  setPlan(plan){const next=validatePlan(plan),locked=this.lockedPlanRows();if(next.length<locked||next.slice(0,locked).some((p,i)=>p.mode!==this.plan[i].mode))throw Error('已完成和正在执行的计划已绑定订单，请修改后续计划；重开后可重新设置全部计划');this.plan=next;this.history=[];this.failure='';this.record('计划修改',`已设置${next.length}行计划`,this.current()?'保留当前订单和已完成记录，后续每行完成1单，全部执行后停止':`已完成${this.planIndex}行；剩余每行只完成1单，全部执行后停止`);return this.plan}
   validateCapacity(n){if(!Number.isInteger(n)||n<0||n>200)throw Error('仓库容量请输入0到200格')}
   resizeWarehouse(n){this.validateCapacity(n);const stock=this.warehouse.filter(Boolean);if(n<stock.length)throw Error(`仓库已有${stock.length}件物品，不能缩到${n}格`);this.checkpoint();this.warehouse=[...stock,...Array(n-stock.length).fill(null)];this.record('仓库设置',`仓库调整为${n}格`,'只改变可用空间，不改变物品或体力');return n}
   allAvailable(includeWarehouse=true){const available=new Map(),add=(t,id)=>{if(t?.name){if(!available.has(t.name))available.set(t.name,[]);available.get(t.name).push(id)}};this.cells.forEach((t,i)=>add(t,i));if(includeWarehouse)this.warehouse.forEach((t,i)=>add(t,-i-1));return available}
@@ -46,8 +50,9 @@ export class WorkflowSimulator extends RobotSimulator {
     const need=(name,quantity,depth=0)=>{if(depth>40||trail.has(name))throw Error('配方层级或循环异常');const ids=inventory.get(name);if(ids?.length){const used=Math.min(quantity,ids.length);ids.splice(0,used);quantity-=used}if(quantity<=0)return;const item=this.items.get(name);if(!item||item.error)throw Error('物品无法拆解');trail.add(name);const ing=this.ingredients(name);if(ing?.length){extra+=(item.extra||0)*quantity;for(const n of ing)need(n,quantity,depth+1)}else if(item.chain&&item.level>1){const prev=this.base.get(`${item.chain}:${item.level-1}`);if(!prev)throw Error('缺少基础等级');need(prev,quantity*2,depth+1)}else if(item.chain)deficits[item.chain]=(deficits[item.chain]||0)+quantity;else throw Error('无生成方式');trail.delete(name)};
     try{order.lines.forEach(l=>need(l.name,l.quantity));const generators={};for(const [chain,quantity] of Object.entries(deficits)){const eff=order.eff[chain]||0,remaining=Math.max(0,quantity-(useInventory?this.fractions[chain]||0:0));if(remaining>0&&eff<=0)return Infinity;const g=chain.includes('_a_')?'被动':`os_${chain.split('_')[1]}`;generators[g]=Math.max(generators[g]||0,Math.ceil(remaining/(eff||1)-1e-9))}return extra+Object.values(generators).reduce((a,b)=>a+b,0)}catch{return Infinity}
   }
-  evaluations(){return this.pending().map(o=>{const remaining=this.estimate(o),total=this.estimate(o,false);return {id:o.id,title:o.title,reward:o.reward,rewardSource:o.rewardSource,remaining,progress:Math.max(0,Math.min(1,total?1-remaining/total:1))}})}
+  evaluations(){return this.pending().map(o=>{const remaining=this.estimate(o),total=this.estimate(o,false);return {id:o.id,title:o.title,reward:o.reward,rewardSource:o.rewardSource,remaining,progress:Number.isFinite(remaining)&&Number.isFinite(total)?Math.max(0,Math.min(1,total?1-remaining/total:1)):0}})}
   choose(){
+    if(this.complete())return {type:'done'};
     const mode=this.plan[this.planIndex]?.mode??'easy',rows=this.evaluations().filter(o=>Number.isFinite(o.remaining));if(!rows.length)return {type:'error',message:'剩余订单无法生成，请在订单编辑中核对需求与生成效率'};
     let chosen,randomState=this.randomState;
     if(mode==='random'){randomState=(Math.imul(1664525,randomState)+1013904223)>>>0;chosen=rows[Math.floor(randomState/4294967296*rows.length)]}
@@ -76,11 +81,12 @@ export class WorkflowSimulator extends RobotSimulator {
   }
   retrievePlan(index,reason){let to=this.cells.findIndex(t=>!t);if(to<0){const compact=this.safeCompact(this.reservedStock().available);if(compact)return {...this.describe(compact),reason:'棋盘已满，先合并释放一格，再取回仓库材料'};to=this.stashCandidate()}return {type:'retrieve',index,to,seconds:.4,cost:0,label:'取回仓库物品',reason:reason+(this.cells[to]?.name?'；棋盘已满，与一件暂不优先使用的物品换位':'')};}
   record(kind,label,reason){if(!this.events)return;this.events.push({serial:++this.eventSerial,kind,label,reason,step:this.actions,completed:this.delivered,elapsed:this.elapsed,energy:this.energy,coins:this.coins,order:this.current()?.title??null})}
-  submit(){const order=this.current();if(!order)return this.fail('请先按计划选择一张订单');const result=super.submit();if(result.ok){this.completedIds.push(order.id);this.coins+=order.reward;this.activeId=null;this.resumeGenerate=null;if(this.planStartsNext){this.planStartsNext=false;this.planIndex=0;this.planDone=0}else{this.planDone++;if(this.planDone>=this.plan[this.planIndex].repeat){this.planDone=0;this.planIndex=(this.planIndex+1)%this.plan.length}}this.cursor=this.completedIds.length}return result}
+  submit(){const order=this.current();if(!order)return this.fail('请先按计划选择一张订单');const result=super.submit();if(result.ok){this.completedIds.push(order.id);this.coins+=order.reward;this.activeId=null;this.resumeGenerate=null;this.planIndex++;this.cursor=this.completedIds.length}return result}
   execute(action){
+    if(action.type==='done')return {ok:false,message:this.ordersComplete()?'当天全部订单已交付':'已执行完设置的计划，机器人已停止'};
     if(action.type==='select'){
-      if(this.current()||this.completedIds.includes(action.orderId)||!this.orders.some(o=>o.id===action.orderId))return this.fail('订单选择已失效');
-      this.checkpoint();this.activeId=action.orderId;this.randomState=action.randomState;this.decision={...copy(action),round:this.delivered+1};this.lastAction={...action,step:this.actions};this.failure='';this.record('选单',action.label,action.reason);return {ok:true,action:this.lastAction};
+      if(this.complete()||this.current()||this.completedIds.includes(action.orderId)||!this.orders.some(o=>o.id===action.orderId))return this.fail('订单选择已失效');
+      this.checkpoint();this.activeId=action.orderId;this.planOrders[this.planIndex]=action.orderId;this.randomState=action.randomState;this.decision={...copy(action),round:this.planIndex+1};this.lastAction={...action,step:this.actions};this.failure='';this.record('选单',`计划${this.planIndex+1}：${action.label}`,action.reason+'；本行只完成这张订单，交付后推进下一行');return {ok:true,action:this.lastAction};
     }
     if(action.type==='store'||action.type==='retrieve'){
       if(action.type==='store'&&(!this.cells[action.index]?.name||!this.warehouse.some(t=>!t)))return this.fail('无法存入：物品不存在或仓库已满');
@@ -90,6 +96,6 @@ export class WorkflowSimulator extends RobotSimulator {
       else{name=this.warehouse[action.index].name;[this.warehouse[action.index],this.cells[action.to]]=[this.cells[action.to],this.warehouse[action.index]];this.last=[action.to]}
       const message=`${action.type==='store'?'存入':'取回'} ${this.items.get(name)?.display??name}`;this.actionDone(message);this.elapsed+=.4;this.lastAction={...action,label:message,step:this.actions};this.record('仓库',message,action.reason||'手动整理，不消耗体力');return {ok:true,action:this.lastAction};
     }
-    const order=this.current(),result=super.execute(action);if(result.ok){if(action.type==='generate')this.resumeGenerate=null;this.record(action.type==='submit'?'交付':'操作',action.type==='submit'?`交付 ${order.title}，获得${order.reward}金币${order.rewardSource==='demo'?'（演示值）':''}`:this.lastAction.label,action.reason||'执行当前订单的合法操作')}else if(action.type!=='done')this.record('暂停',result.message,action.reason||'没有可执行的安全动作');return result;
+    const order=this.current(),result=super.execute(action);if(result.ok){if(action.type==='generate')this.resumeGenerate=null;this.record(action.type==='submit'?'交付':'操作',action.type==='submit'?`交付 ${order.title}，获得${order.reward}金币${order.rewardSource==='demo'?'（演示值）':''}`:this.lastAction.label,action.reason||'执行当前订单的合法操作');if(action.type==='submit'&&this.complete())this.record('自动停止',this.ordersComplete()?'当日订单已全部交付':'设置的计划已全部完成',this.ordersComplete()?`已交付全部${this.orders.length}单，没有剩余订单`:`${this.plan.length}行计划各完成1单；订单池还有${this.pending().length}单，未设置计划的订单不会继续执行`)}else this.record('暂停',result.message,action.reason||'没有可执行的安全动作');return result;
   }
 }
