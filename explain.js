@@ -190,7 +190,7 @@ export const EXPLANATIONS={
   ],
   "matrix": [
     "OS 相关矩阵",
-    "每个格子比较横向与纵向两类生成器每日点击的同步程度。蓝色偏同步，橙色偏交替；数值从−1到1。样本不足或一条线不变时显示“—”。"
+    "这张表帮你看：两类生成器，通常是同一天一起忙，还是一类忙时另一类比较闲？这里的“忙”指当天订单需要的生成器点击次数。\n\n① 先找到要看的格子\n左边选一行，上边选一列，交叉的格子就比较这两类生成器。例如“OS1行 × OS3列”，是在比较衣装与茶点饮品。它会把当前所选范围内每个有效日期的两组点击次数配对计算；更换日期范围，结果也可能变化。\n\n② 数字和颜色怎么看\n蓝色、接近 +1：两者常在同一天都高于各自平均水平，或者都低于各自平均水平。可以理解为经常一起忙、一起闲。\n橙色、接近 −1：一类高于自己的平均水平时，另一类往往较低，需求比较错开。\n接近 0、颜色浅：看不出明显的直线对应规律，不代表两者完全没有关系。\n颜色越深，说明这种对应越明显；深色不代表订单更多，也不代表配置更好。0.8不是“80%的概率”。\n\n③ 用3天举例（演示数字，不是你的配置）\n假设OS1每天点击：10、20、30次。\n• OS3是20、40、60次 → 结果 +1。两者同一天相对较少、中等、较多。次数不必相等，也可以完全同步。\n• OS3是60、40、20次 → 结果 −1。OS1越多的那一天，OS3越少。\n• OS3是20、40、20次 → 结果 0。OS1逐渐增多，OS3却先多后少，没有直线对应。\n\n④ 放到游戏节奏里怎么用\n较大的正数，可以提示两类生成器的高需求是否经常叠在同一天；较大的负数，可以提示两类需求是否经常错开。它只描述一起忙还是错开忙，不直接判断体力是否合理、玩家是否轻松，也不证明一种需求导致了另一种需求。判断负载大小，还要看每天体力和实际点击次数。\n\n⑤ 为什么有1、重复值或“—”\n对角线是自己和自己比较，只要数值有变化就为1。OS1×OS3与OS3×OS1是同一组比较，所以表格两侧对称。“—”表示不足3个有效日期，或其中一类每天点击完全相同，无法计算；它不等于0。示例只有3天是为了好懂，实际判断应结合更多日期。\n\n点任意格子，可以查看这两类生成器逐日的点击次数；再点日期，就能追溯到当天订单。"
   ],
   "pairDays": [
     "两条物品线的逐日对照",
@@ -279,5 +279,5 @@ export const EXPLANATIONS={
 };
 const escapeText=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const help=(key,label=EXPLANATIONS[key]?.[0])=>{if(!EXPLANATIONS[key])return '';return `<button class="help-dot" data-help="${key}" data-help-title="${escapeText(label)}" aria-label="解释：${escapeText(label)}" title="解释：${escapeText(label)}">?</button>`};
-export function showHelp(key,label){const entry=EXPLANATIONS[key];if(!entry)return;const [title,body]=entry;let dialog=document.querySelector('#help-dialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='help-dialog';document.body.append(dialog);dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close()})}dialog.innerHTML=`<button class="dialog-close" aria-label="关闭解释">×</button><h2></h2><p class="help-copy"></p>`;dialog.querySelector('h2').textContent=label||title;dialog.querySelector('p').textContent=body;dialog.querySelector('button').onclick=()=>dialog.close();if(!dialog.open)dialog.showModal()}
+export function showHelp(key,label){const entry=EXPLANATIONS[key];if(!entry)return;const [title,body]=entry;let dialog=document.querySelector('#help-dialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='help-dialog';document.body.append(dialog);dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close()})}dialog.innerHTML=`<button class="dialog-close" aria-label="关闭解释">×</button><h2></h2><p class="help-copy"></p>`;dialog.dataset.helpKey=key;dialog.querySelector('h2').textContent=label||title;dialog.querySelector('p').textContent=body;dialog.querySelector('button').onclick=()=>dialog.close();if(!dialog.open)dialog.showModal()}
 export function installHelp(){document.addEventListener('click',e=>{const button=e.target.closest?.('[data-help]');if(button){e.preventDefault();e.stopPropagation();showHelp(button.dataset.help,button.dataset.helpTitle)}},true)}
