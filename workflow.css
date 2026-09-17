@@ -9,3 +9,5 @@
 .robot-energy-config{padding:12px;border:1px solid #e0e7f3;border-radius:10px;background:#f8faff;margin-bottom:16px}.robot-energy-config>label{font-size:.875rem;color:#526b8b}.robot-energy-config>div{display:flex;align-items:center;gap:8px;margin-top:9px}.robot-energy-config input{min-width:0;width:100%;flex:1;font-size:.875rem}.robot-energy-config button{white-space:nowrap;flex-shrink:0}
 
 .help-copy{white-space:pre-line}#help-dialog[data-help-key="matrix"]{max-width:640px}
+
+.catalog-recipe{display:block;width:100%;border-top:1px solid #e9eef6;padding-top:11px;margin-top:12px;margin-bottom:13px;color:#657b98}.recipe-preview-title{display:block;font-size:.8125rem;color:#8294ad;margin-bottom:8px}.recipe-preview-parts{display:grid;gap:7px}.recipe-preview-part{display:flex;align-items:flex-start;gap:6px;font-size:.875rem;line-height:1.65;overflow-wrap:anywhere}.recipe-preview-part>span:first-child{flex-shrink:0}.recipe-preview-part b{font-weight:500;white-space:nowrap;color:#47617f}.recipe-preview-cost{display:block;margin-top:8px;font-size:.8125rem;color:#aa8342}.catalog-result .item-card-footer{margin-top:auto;padding-top:14px}
