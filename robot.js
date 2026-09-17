@@ -14,7 +14,7 @@ export class RobotSimulator extends MergeSimulator {
     super(data,day,options);
     this.policy={strategy:'orders',focus:'auto'};
     this.elapsed=0;this.lastAction=null;this.energyTrace=[{step:0,value:this.energy}];
-    this.initialEnergy=this.energy;this.refilled=0;
+    this.initialEnergy=this.energy;this.refilled=0;this.energyAdjustment=0;
     if(options.layout!==undefined) this.applyOpening(options.layout,options.energy??this.energy);
     else if(options.energy!==undefined) this.applyOpening(this.exportLayout(),options.energy);
     this.setPolicy(options.strategy??'orders',options.focus??'auto');
@@ -36,12 +36,12 @@ export class RobotSimulator extends MergeSimulator {
     this.validateOpening(layout,energy);
     for(let i=0;i<48;i++)this.cells[i]=layout[i]?{name:layout[i],id:++this.uid}:null;
     this.energy=energy;this.initialEnergy=energy;this.spent=0;this.cursor=0;this.merges=0;this.crafts=0;
-    this.delivered=0;this.actions=0;this.elapsed=0;this.refilled=0;this.fractions={};this.clicks={};
+    this.delivered=0;this.actions=0;this.elapsed=0;this.refilled=0;this.energyAdjustment=0;this.fractions={};this.clicks={};
     this.history=[];this.last=[];this.lastAction=null;this.failure='';this.log=[];
     this.peakOccupancy=56-this.free();this.energyTrace=[{step:0,value:energy}];
     this.note('已摆好初始棋盘');
   }
-  snapshot(){return {...super.snapshot(),elapsed:this.elapsed??0,initialEnergy:this.initialEnergy??this.energy,refilled:this.refilled??0,lastAction:clone(this.lastAction??null),energyTrace:clone(this.energyTrace??[{step:0,value:this.energy}])}}
+  snapshot(){return {...super.snapshot(),elapsed:this.elapsed??0,initialEnergy:this.initialEnergy??this.energy,refilled:this.refilled??0,energyAdjustment:this.energyAdjustment??0,lastAction:clone(this.lastAction??null),energyTrace:clone(this.energyTrace??[{step:0,value:this.energy}])}}
   setPolicy(strategy,focus='auto'){
     if(!STRATEGIES[strategy])throw Error('未知机器人策略');
     if(!['auto','os_1','os_2','os_3','os_4','os_5','os_6','os_7','被动'].includes(focus))throw Error('未知优先生成器');
@@ -54,6 +54,12 @@ export class RobotSimulator extends MergeSimulator {
     return result;
   }
   refill(){const r=super.refill();if(r.ok)this.refilled+=100;return r}
+  setEnergy(value){
+    if(!Number.isInteger(value)||value<0||value>1000000)return this.fail('体力请输入0到1000000的整数');
+    const previous=this.energy;
+    this.checkpoint();this.energyAdjustment+=value-previous;this.energy=value;this.last=[];
+    return this.actionDone(`手动设置体力：${previous} → ${value}`);
+  }
   generatorFor(item){return item?.chain?.includes('_a_')?'被动':item?.chain?`os_${item.chain.split('_')[1]}`:null}
   reservedStock(){
     const available=new Map();this.cells.forEach((t,i)=>{if(t?.name){if(!available.has(t.name))available.set(t.name,[]);available.get(t.name).push(i)}});

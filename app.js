@@ -7,7 +7,7 @@ const OS=['os_1','os_2','os_3','os_4','os_5','os_6','os_7','被动'];
 const NAMES=['衣装','鞋履箱包','茶点饮品','珠宝配饰','材料矿石','玩偶','花卉美妆','专属 OSA'];
 const ICONS=['👕','👟','🍰','💎','🧵','🧸','🌷','🎁'];
 const PATHS={overview:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',rhythm:'M3 17l5-9 5 6 8-12M3 21h18',generators:'M12 3l9 5v8l-9 5-9-5V8zM3 8l9 5 9-5M12 13v8',board:'M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18',catalog:'M4 3h6v18H4zM14 3h6v18h-6z',source:'M3 5h18v14H3zM3 10h18M9 5v14'};
-const PAGES=[['overview','体验总览'],['rhythm','订单节奏'],['generators','物品产出'],['board','机器人游乐场'],['catalog','物品图鉴'],['source','数据与说明']];
+const PAGES=[['overview','体验总览'],['rhythm','订单节奏'],['generators','物品产出'],['board','机器人模拟'],['catalog','物品图鉴'],['source','数据与说明']];
 const chartSeriesStorage='merge-lab-chart-series-v1';
 const chartSeries={actual:true,trend:true,target:true};
 try{const saved=JSON.parse(localStorage.getItem(chartSeriesStorage)||'null');for(const key of Object.keys(chartSeries))if(typeof saved?.[key]==='boolean')chartSeries[key]=saved[key]}catch{}
