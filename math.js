@@ -1,0 +1,4 @@
+export const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+export function stats(input){let a=input.filter(Number.isFinite).sort((x,y)=>x-y),n=a.length,sum=a.reduce((s,v)=>s+v,0),mean=n?sum/n:NaN;let quantile=p=>{if(!n)return NaN;let k=(n-1)*p,l=Math.floor(k);return a[l]+(a[Math.ceil(k)]-a[l])*(k-l)};let sd=n?Math.sqrt(a.reduce((s,v)=>s+(v-mean)**2,0)/n):NaN;return {n,sum,mean,sd,cv:mean?sd/mean:NaN,median:quantile(.5),p10:quantile(.1),p90:quantile(.9),q1:quantile(.25),q3:quantile(.75),min:a[0],max:a.at(-1),gini:sum?2*a.reduce((s,v,i)=>s+(i+1)*v,0)/(n*sum)-(n+1)/n:NaN};}
+export function correlation(a,b){if(a.length<3||a.length!==b.length)return NaN;let ma=stats(a).mean,mb=stats(b).mean,x=0,y=0,z=0;a.forEach((v,i)=>{x+=(v-ma)*(b[i]-mb);y+=(v-ma)**2;z+=(b[i]-mb)**2});return y&&z?x/Math.sqrt(y*z):NaN}
+export function rolling(a,n){return a.map((_,i)=>stats(a.slice(Math.max(0,i-n+1),i+1)).mean)}
